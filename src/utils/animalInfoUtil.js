@@ -7,11 +7,13 @@
 
 let animalJson = require('../data/animal.json');
 const mysql = require('./../botHandlers/mysqlHandler.js');
+let bot;
 
 class AnimalJson {
 	constructor() {
 		this.initialize = this.initialize.bind(this);
 		this.reinitialize = this.reinitialize.bind(this);
+		this.reinitializeAnimal = this.reinitializeAnimal.bind(this);
 		this.parseAnimal = this.parseAnimal.bind(this);
 		this.parseRank = this.parseRank.bind(this);
 		this.getAnimal = this.getAnimal.bind(this);
@@ -20,14 +22,36 @@ class AnimalJson {
 		this.getOrder = this.getOrder.bind(this);
 	}
 
+	setBot(bot_) {
+		bot = bot_;
+	}
+
 	async initialize() {
+		if (!bot) {
+			return new Promise((res) => {
+				setTimeout(() => {
+					res(this.initialize());
+				}, 5000);
+			});
+		}
 		this.animalNameToKey = {};
 		this.animals = {};
 		this.order = [];
 		this.ranks = {};
 		this.rankNameToKey = {};
 
-		const result = await mysql.query(`SELECT * FROM animals;`);
+		let result;
+		try {
+			result = await mysql.query(`SELECT * FROM animals;`);
+		} catch (err) {
+			console.error(err);
+			console.error('Failed to fetch animals, retrying in 10s');
+			return new Promise((res) => {
+				setTimeout(() => {
+					res(this.initialize());
+				}, 5000);
+			});
+		}
 
 		result.forEach(this.parseAnimal);
 		Object.keys(animalJson.ranks).forEach(this.parseRank);
@@ -47,6 +71,30 @@ class AnimalJson {
 		const newAnimalJson = new AnimalJson();
 		await newAnimalJson.initialize();
 		this.copy(newAnimalJson);
+	}
+
+	deleteAnimal(animalName) {
+		const animalId = this.animalNameToKey[animalName.toLowerCase()];
+		if (!animalId) {
+			return;
+		}
+		const animal = this.animals[animalId];
+		if (!animal) {
+			return;
+		}
+		delete this.animals[animalId];
+		animal.alt.forEach((alt) => {
+			alt = alt.toLowerCase();
+			if (this.animalNameToKey[alt] === animalId) {
+				delete this.animalNameToKey[alt];
+			}
+		});
+		if (this.animalNameToKey[animalId.toLowerCase()] === animalId) {
+			delete this.animalNameToKey[animalId.toLowerCase()];
+		}
+
+		const rank = this.ranks[animal.rank];
+		rank.deleteAnimal(animal);
 	}
 
 	async reinitializeAnimal(animalName) {
@@ -152,7 +200,11 @@ class Animal {
 		this.alt = alt;
 		this.value = rawAnimal.name;
 		this.emoji = rawAnimal.name;
-		this.name = alt[0];
+		const emojiInfo = bot.global.parseEmoji(rawAnimal.name);
+		if (emojiInfo?.name) {
+			this.alt.push(emojiInfo.name);
+		}
+		this.name = emojiInfo?.name || alt[0];
 		this.hpr = this.hp = rawAnimal.hp;
 		this.attr = this.att = rawAnimal.att;
 		this.prr = this.pr = rawAnimal.pr;
@@ -201,6 +253,13 @@ class AnimalRank {
 	useTemp() {
 		this.animals = this.tempAnimals;
 		this.tempAnimals = [];
+	}
+
+	deleteAnimal(animal) {
+		const index = this.animals.indexOf(animal.value);
+		if (index > -1) {
+			this.animals.splice(index, 1);
+		}
 	}
 }
 

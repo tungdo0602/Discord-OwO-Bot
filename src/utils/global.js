@@ -32,10 +32,10 @@ try {
 filter2.removeWords(goodwords);
 const namor = require('namor');
 const animalInfo = require('./animalInfoUtil.js');
-const mysql = require('./../botHandlers/mysqlHandler.js');
+const cacheUtil = require('./cacheUtil.js');
 let client, main;
 let totalShards;
-const uidDict = {};
+let clusterShards = 'n/a';
 
 /**
  * Checks if its an integer
@@ -88,6 +88,18 @@ exports.parseID = function (id) {
 exports.init = function (bot) {
 	main = bot;
 	client = bot.bot;
+	let lowestShard = Number.MAX_SAFE_INTEGER;
+	let highestShard = -1;
+	bot.bot.shards.forEach((val) => {
+		const id = val.id;
+		if (id < lowestShard) {
+			lowestShard = id;
+		}
+		if (id > highestShard) {
+			highestShard = id;
+		}
+	});
+	clusterShards = `${lowestShard} - ${highestShard}`;
 };
 
 exports.validAnimal = animalInfo.getAnimal;
@@ -95,6 +107,10 @@ exports.validRank = animalInfo.getRank;
 exports.getAllRanks = animalInfo.getRanks;
 exports.unicodeAnimal = function (name) {
 	return name;
+};
+
+exports.getShardString = function () {
+	return clusterShards;
 };
 
 exports.toSmallNum = function (count, digits) {
@@ -205,7 +221,7 @@ exports.cleanString = function (string) {
 };
 
 exports.isEmoji = function (string) {
-	return /^<a?:[\w]+:[0-9]+>$/gi.test(string.trim());
+	return /^<a?:[\w]+:[0-9]+>$/gi.test(string?.trim());
 };
 
 exports.parseTime = function (diff) {
@@ -231,23 +247,7 @@ exports.parseTime = function (diff) {
 
 /* gets uid from discord id */
 exports.getUid = async function (id) {
-	id = BigInt(id);
-	if (uidDict[id]) {
-		return uidDict[id];
-	}
-	let sql = 'SELECT uid FROM user where id = ?;';
-	let result = await mysql.query(sql, id);
-
-	if (result[0]?.uid) {
-		uidDict[id] = result[0].uid;
-		return result[0].uid;
-	}
-
-	sql = 'INSERT INTO user (id, count) VALUES (?, 0);';
-	result = await mysql.query(sql, id);
-
-	uidDict[id] = result.insertId;
-	return result.insertId;
+	return cacheUtil.getUid(id);
 };
 
 exports.getUserUid = async function (user) {
@@ -275,7 +275,7 @@ exports.parseEmoji = function (emoji) {
 	id = id[0].match(/[0-9]+/gi)[0];
 	let name = emoji.match(/:[\w]+:/gi);
 	if (!name || !name[0]) return;
-	name = emoji.slice(1, -1);
+	name = name[0].slice(1, -1);
 	return { id, name };
 };
 
@@ -391,4 +391,30 @@ exports.selectRandom = function (array, total) {
 			return item;
 		}
 	}
+};
+
+exports.getStealButton = async function (p, withComponent) {
+	const sql = `SELECT emoji_steal.guild FROM emoji_steal INNER JOIN user ON emoji_steal.uid = user.uid WHERE id = ${p.msg.author.id};`;
+	const canSteal = (await p.query(sql))[0]?.guild;
+	if (!canSteal) {
+		return;
+	}
+	const components = [
+		{
+			type: 1,
+			components: [
+				{
+					type: 2,
+					label: 'Steal',
+					style: 1,
+					custom_id: 'steal',
+					emoji: {
+						id: null,
+						name: p.config.emoji.steal,
+					},
+				},
+			],
+		},
+	];
+	return withComponent ? components : components[0].components;
 };

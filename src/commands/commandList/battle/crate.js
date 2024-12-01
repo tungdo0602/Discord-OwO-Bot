@@ -10,7 +10,7 @@ const CommandInterface = require('../../CommandInterface.js');
 const crateShake = '<a:crateshake:523771259172028420>';
 const crateOpen = '<a:crateopen:523771437408845852>';
 const weaponUtil = require('./util/weaponUtil.js');
-const maxBoxes = 50;
+const maxBoxes = 20;
 
 module.exports = new CommandInterface({
 	alias: ['crate', 'weaponcrate', 'wc'],
@@ -27,7 +27,24 @@ module.exports = new CommandInterface({
 
 	group: ['animals'],
 
-	cooldown: 5000,
+	appCommands: [
+		{
+			'name': 'crate',
+			'type': 1,
+			'description': 'Open a weapon crate',
+			'options': [
+				{
+					'type': 4,
+					'name': 'count',
+					'description': 'Number of weapon crates',
+				},
+			],
+			'integration_types': [0, 1],
+			'contexts': [0, 1, 2],
+		},
+	],
+
+	cooldown: 30000,
 	half: 100,
 	six: 500,
 
@@ -39,7 +56,7 @@ module.exports = new CommandInterface({
 		} else if (p.args.length > 0 && p.args[0].toLowerCase() == 'all') {
 			let sql = `SELECT boxcount FROM crate INNER JOIN user ON crate.uid = user.uid WHERE id = ${p.msg.author.id};`;
 			let result = await p.query(sql);
-			if (!result || result[0].boxcount <= 0) {
+			if (!result[0] || result[0].boxcount <= 0) {
 				p.errorMsg(", you don't have any more weapon crates!");
 				return;
 			}

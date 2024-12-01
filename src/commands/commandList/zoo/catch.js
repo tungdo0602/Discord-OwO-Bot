@@ -32,6 +32,16 @@ module.exports = new CommandInterface({
 
 	group: ['animals'],
 
+	appCommands: [
+		{
+			'name': 'hunt',
+			'type': 1,
+			'description': 'Hunt for some animals!',
+			'integration_types': [0, 1],
+			'contexts': [0],
+		},
+	],
+
 	cooldown: 15000,
 	half: 80,
 	six: 500,
@@ -173,7 +183,7 @@ async function getAnimals(p, result, gems, uid) {
 		if (gems['Patreon']) count += 1;
 	}
 
-	let { ordered, animalSql, typeCount, xp } = animalUtil.getMultipleAnimals(
+	let { ordered, animalSql, typeCount, xp } = await animalUtil.getMultipleAnimals(
 		count,
 		p.msg.author,
 		opt

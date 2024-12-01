@@ -69,6 +69,7 @@ class OwO extends Base {
 		this.global.init(this);
 
 		this.animalUtil = require('./utils/animalInfoUtil.js');
+		this.animalUtil.setBot(this);
 
 		this.rewardUtil = require('./utils/rewardUtil.js');
 
@@ -135,6 +136,8 @@ class OwO extends Base {
 
 		// sends info to our main server every X seconds
 		this.InfoUpdater = new (require('./utils/InfoUpdater.js'))(this);
+
+		this.logger.logstashQos('launch');
 	}
 
 	async setOptOut() {

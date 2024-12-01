@@ -9,7 +9,6 @@ const CommandInterface = require('../../CommandInterface.js');
 
 const baseURL = 'https://cdn.discordapp.com/emojis/';
 const stickerUrl = 'https://media.discordapp.net/stickers/';
-const stealEmoji = '🕵️';
 
 module.exports = new CommandInterface({
 	alias: ['emoji', 'enlarge', 'jumbo'],
@@ -26,46 +25,35 @@ module.exports = new CommandInterface({
 
 	group: ['social'],
 
+	appCommands: [
+		{
+			'type': 3,
+			'name': 'Grab Emojis',
+			'dm_permission': true,
+			'integration_types': [0, 1],
+			'contexts': [0, 1, 2],
+		},
+	],
+
 	cooldown: 7000,
 	half: 100,
 	six: 500,
 
 	execute: async function (p) {
-		/* Look at previous message */
-		if (
-			p.args.length == 0 ||
-			(p.args[0] &&
-				(p.args[0].toLowerCase() == 'prev' ||
-					p.args[0].toLowerCase() == 'previous' ||
-					p.args[0].toLowerCase() == 'p'))
-		) {
+		// Special case for message interaction
+		if (this.interaction && this.options.message) {
+			const emojis = parseEmojis([this.options.message]);
+			await display(p, emojis);
+
+			/* Look at previous message */
+		} else if (!p.args.length || ['prev', 'previous', 'p'].includes(p.args[0]?.toLowerCase())) {
 			let msgs = await p.global.getChannelMessages(p.msg.channel, 10);
 			if (!msgs) {
 				p.errorMsg(', There are no emojis! >:c', 3000);
 				return;
 			}
-			let emojis = '';
-			for (let i in msgs) {
-				const msg = msgs[i];
-				emojis += msg.content;
-				emojis += JSON.stringify(msg.embeds);
-				if (msg.reactions) {
-					for (let name in msg.reactions) {
-						const emoji = msg.reactions[name];
-						emojis += `<${emoji.animated ? 'a' : ''}:${name}>`;
-					}
-				}
-				if (msg.stickerItems?.length) {
-					msg.stickerItems.forEach((sticker) => {
-						emojis += `<s:${sticker.name}:${sticker.id}>`;
-					});
-				}
-			}
-
-			emojis = parseIDs(emojis);
-			if (emojis.length == 0)
-				p.errorMsg(', There are no emojis! I can only look at the previous 10 messages! >:c', 3000);
-			else await display(p, emojis);
+			const emojis = parseEmojis(msgs);
+			await display(p, emojis);
 
 			// Set emoji steal guild
 		} else if (['setguild', 'setserver', 'set', 'setsteal'].includes(p.args[0].toLowerCase())) {
@@ -81,11 +69,31 @@ module.exports = new CommandInterface({
 		} else {
 			let text = p.args.join(' ');
 			let emojis = parseIDs(text);
-			if (emojis.length == 0) p.errorMsg(', There are no emojis! >:c', 3000);
-			else await display(p, emojis);
+			await display(p, emojis);
 		}
 	},
 });
+
+function parseEmojis(msgs) {
+	let emojis = '';
+	msgs.forEach((msg) => {
+		emojis += msg.content;
+		emojis += JSON.stringify(msg.embeds);
+		if (msg.reactions) {
+			for (let name in msg.reactions) {
+				const emoji = msg.reactions[name];
+				emojis += `<${emoji.animated ? 'a' : ''}:${name}>`;
+			}
+		}
+		if (msg.stickerItems?.length) {
+			msg.stickerItems.forEach((sticker) => {
+				emojis += `<s:${sticker.name}:${sticker.id}>`;
+			});
+		}
+	});
+
+	return parseIDs(emojis);
+}
 
 function parseIDs(text) {
 	let emojis = [];
@@ -121,6 +129,9 @@ function parseIDs(text) {
 }
 
 async function display(p, emojis) {
+	if (emojis.length == 0) {
+		return p.errorMsg(', There are no emojis! >:c', 3000);
+	}
 	const emojiAdders = [];
 	const createEmbed = (currentPage, maxPage) => {
 		const emoji = emojis[currentPage];
@@ -158,7 +169,7 @@ async function display(p, emojis) {
 		return embed;
 	};
 
-	const additionalButtons = await getStealButton(p);
+	const additionalButtons = await p.global.getStealButton(p);
 	const additionalFilter = (componentName, _user) => componentName === 'steal';
 	const pagedMsg = new p.PagedMessage(p, createEmbed, emojis.length - 1, {
 		idle: 120000,
@@ -181,25 +192,6 @@ async function display(p, emojis) {
 			}
 		}
 	});
-}
-
-async function getStealButton(p) {
-	const sql = `SELECT emoji_steal.guild FROM emoji_steal INNER JOIN user ON emoji_steal.uid = user.uid WHERE id = ${p.msg.author.id};`;
-	const canSteal = (await p.query(sql))[0]?.guild;
-	if (canSteal) {
-		return [
-			{
-				type: 2,
-				label: 'Steal',
-				style: 1,
-				custom_id: 'steal',
-				emoji: {
-					id: null,
-					name: stealEmoji,
-				},
-			},
-		];
-	}
 }
 
 async function setServer(p) {
@@ -228,11 +220,11 @@ async function setServer(p) {
 		}
 	}
 
-	p.replyMsg(stealEmoji, ', stolen emojis will now be sent to this server!');
+	p.replyMsg(p.config.emoji.steal, ', stolen emojis will now be sent to this server!');
 }
 
 async function unsetServer(p) {
 	let sql = `DELETE FROM emoji_steal WHERE uid = (SELECT uid FROM user WHERE id = ${p.msg.author.id});`;
 	await p.query(sql);
-	p.replyMsg(stealEmoji, ', your server has been unset for stealing!');
+	p.replyMsg(p.config.emoji.steal, ', your server has been unset for stealing!');
 }
